@@ -21,6 +21,7 @@ NO PROBADO en tu hardware: la deteccion de bola cromada depende de la luz; afina
 los parametros de la seccion CONFIG viendo la imagen.
 """
 import argparse
+import os
 import sys
 import time
 
@@ -43,6 +44,9 @@ MAX_STEPS = 40           # igual que en el .ino
 KP, KI, KD = 0.08, 0.0, 0.05   # ganancias iniciales (pasos por 0.1 mm de error) -> AFINAR
 SIGN_X, SIGN_Y = 1, 1    # cambia a -1 si el plato corrige al reves
 SEND_HZ = 30
+CAM_JPG = "camara.jpg"   # imagen para el SCADA (LabVIEW la lee con Read JPEG File)
+CAM_JPG_HZ = 5
+CAM_JPG_SIZE = (320, 240)
 HOUGH_PARAM2 = 25        # menor = mas sensible (mas falsos positivos)
 # ==================================================
 
@@ -148,6 +152,7 @@ def main():
     last_send = 0.0
     last_t = time.time()
     lost_frames = 0
+    last_jpg = 0.0
 
     while True:
         ok, frame = cap.read()
@@ -216,6 +221,17 @@ def main():
             cv2.putText(view, f"sens={param2}", (10, FRAME_H - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
             cv2.imshow(win, view)
+
+        # Imagen para el SCADA (con la bola marcada). Se escribe a un temporal y se renombra
+        # para que LabVIEW nunca lea un archivo a medias.
+        if time.time() - last_jpg >= 1.0 / CAM_JPG_HZ:
+            last_jpg = time.time()
+            try:
+                small = cv2.resize(view, CAM_JPG_SIZE)
+                cv2.imwrite(CAM_JPG + ".tmp.jpg", small)
+                os.replace(CAM_JPG + ".tmp.jpg", CAM_JPG)
+            except OSError:
+                pass  # LabVIEW lo esta leyendo en ese instante: se intenta en el siguiente ciclo
 
         k = cv2.waitKey(1) & 0xFF
         if k == ord("q"):
